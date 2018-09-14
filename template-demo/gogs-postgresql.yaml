@@ -1,0 +1,116 @@
+#apiVersion: v1
+#kind: PersistentVolumeClaim
+#metadata:
+# name: glusterfs-volums-gogs-postgres-data
+#spec:
+# accessModes:
+#  - ReadWriteMany
+# resources:
+#   requests:
+#        storage: 1Gi
+# storageClassName: glusterfs-storage
+---
+apiVersion: apps.openshift.io/v1
+kind: DeploymentConfig
+metadata:
+  annotations:
+    description: Defines how to deploy the database
+    openshift.io/generated-by: OpenShiftNewApp
+  generation: 2
+  labels:
+    app: gogs
+  name: gogs-postgresql
+  namespace: cicd
+spec:
+  replicas: 1
+  revisionHistoryLimit: 10
+  selector:
+    name: gogs-postgresql
+  strategy:
+    activeDeadlineSeconds: 21600
+    recreateParams:
+      timeoutSeconds: 600
+    resources: {}
+    type: Recreate
+  template:
+    metadata:
+      annotations:
+        openshift.io/generated-by: OpenShiftNewApp
+      creationTimestamp: null
+      labels:
+        name: gogs-postgresql
+      name: gogs-postgresql
+    spec:
+      containers:
+      - env:
+        - name: POSTGRESQL_USER
+          value: gogs
+        - name: POSTGRESQL_PASSWORD
+          value: gogs
+        - name: POSTGRESQL_DATABASE
+          value: gogs
+        - name: POSTGRESQL_MAX_CONNECTIONS
+          value: "100"
+        - name: POSTGRESQL_SHARED_BUFFERS
+          value: 12MB
+        - name: POSTGRESQL_ADMIN_PASSWORD
+          value: usNNWCvF
+        image: docker-registry.default.svc:5000/openshift/postgresql@sha256:90b254045b3046cd0129d1687f9032e780d33038209db5a41dc44c528402cd9e
+        imagePullPolicy: IfNotPresent
+        livenessProbe:
+          failureThreshold: 3
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          successThreshold: 1
+          tcpSocket:
+            port: 5432
+          timeoutSeconds: 1
+        name: postgresql
+        ports:
+        - containerPort: 5432
+          protocol: TCP
+        readinessProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -i
+            - -c
+            - psql -h 127.0.0.1 -U ${POSTGRESQL_USER} -q -d ${POSTGRESQL_DATABASE}
+              -c 'SELECT 1'
+          failureThreshold: 3
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 1
+        resources:
+          limits:
+            memory: 512Mi
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /var/lib/pgsql/data
+          name: gogs-postgres-data
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext: {}
+      serviceAccount: gogs
+      serviceAccountName: gogs
+      terminationGracePeriodSeconds: 30
+      volumes:
+      - name: gogs-postgres-data
+        persistentVolumeClaim:
+          claimName: glusterfs-volums-gogs-postgres-data
+  test: false
+  triggers:
+  - imageChangeParams:
+      automatic: true
+      containerNames:
+      - postgresql
+      from:
+        kind: ImageStreamTag
+        name: postgresql:9.5
+        namespace: openshift
+      lastTriggeredImage: docker-registry.default.svc:5000/openshift/postgresql@sha256:90b254045b3046cd0129d1687f9032e780d33038209db5a41dc44c528402cd9e
+    type: ImageChange
+  - type: ConfigChange
